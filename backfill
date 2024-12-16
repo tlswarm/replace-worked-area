@@ -1,0 +1,79 @@
+#!/bin/bash
+
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 <1-4 digit number> <start percentage> <finish percentage>"
+    exit 1
+fi
+
+# Parse arguments
+number="$1"
+start_percentage="$2"
+finish_percentage="$3"
+
+if ! [[ $number =~ ^[0-9]{1,4}$ ]]; then
+    echo "Error: First argument must be a 1-4 digit number."
+    exit 1
+fi
+
+if ! [[ $start_percentage =~ ^[1-9][0-9]?$ && $start_percentage -ge 1 && $start_percentage -le 99 ]]; then
+    echo "Error: Start percentage must be between 1 and 99."
+    exit 1
+fi
+
+if ! [[ $finish_percentage =~ ^100$|^[1-9][0-9]?$ && $finish_percentage -ge 1 && $finish_percentage -le 100 ]]; then
+    echo "Error: Finish percentage must be between 1 and 100."
+    exit 1
+fi
+
+# Step 1: Extract larger width
+echo "Authenticating swarmfarm access..."
+swarmfarm-auth-access
+
+echo "Looking up width-to-articulation-angle limits..."
+sfp_output=$(sfp lookup -p attachment.thresholds.width-to-articulation-angle-limits -t sb-0042)
+
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to execute sfp lookup."
+    exit 1
+fi
+
+widths=$(echo "$sfp_output" | jq -r '.value[].width')
+width_arg=$(echo "$widths" | sort -nr | head -n1)
+
+echo "Extracted width: $width_arg"
+
+# Step 2: Extract plan ID
+echo "Accessing ROS client with number: $number..."
+ros-access-client -f $ZT_IP $(getrobotname $number)
+
+echo "Echoing job queue..."
+rostopic_output=$(rostopic echo -n 1 /SwarmbotJobMaintainer/job_queue)
+
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to echo job queue."
+    exit 1
+fi
+
+plan_id=$(echo "$rostopic_output" | grep -oP 'data: \"\K[a-f0-9\-]+')
+
+if [ -z "$plan_id" ]; then
+    echo "Error: Unable to extract plan ID."
+    exit 1
+fi
+
+echo "Extracted plan ID: $plan_id"
+
+# Step 3: Call ROS service
+echo "Calling ROS service with extracted values..."
+rosservice call /SwarmbotGeometriesHandler/area_distributor/add_path_to_worked_areas "width: $width_arg
+from_percentage: $start_percentage
+to_percentage: $finish_percentage
+plan_id: '$plan_id'"
+
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to call ROS service."
+    exit 1
+fi
+
+echo "Process completed successfully."
+
