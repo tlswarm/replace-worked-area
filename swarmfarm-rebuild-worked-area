@@ -1,7 +1,29 @@
 #!/bin/bash
 
+function print_help {
+    echo "Usage: $0 <1-4 digit number> <start percentage> <finish percentage>"
+    echo ""
+    echo "Arguments:"
+    echo "  <1-4 digit number>        A numeric identifier (1-4 digits)."
+    echo "  <start percentage>        Start percentage for the process (1-99)."
+    echo "  <finish percentage>       Finish percentage for the process (1-100)."
+    echo ""
+    echo "Description:"
+    echo "  This script authenticates with SwarmFarm, retrieves the largest width from the attachment thresholds,"
+    echo "  extracts a plan ID from the ROS job queue, and calls a ROS service with these values."
+    echo ""
+    echo "Options:"
+    echo "  --help                    Display this help message and exit."
+}
+
+if [[ "$1" == "--help" ]]; then
+    print_help
+    exit 0
+fi
+
 if [ "$#" -ne 3 ]; then
     echo "Usage: $0 <1-4 digit number> <start percentage> <finish percentage>"
+    echo "Run '$0 --help' for more information."
     exit 1
 fi
 
@@ -44,7 +66,7 @@ echo "Extracted width: $width_arg"
 
 # Step 2: Extract plan ID
 echo "Accessing ROS client with number: $number..."
-ros-access-client -f $ZT_IP $(getrobotname $number)
+ros-client-access "$number"
 
 echo "Echoing job queue..."
 rostopic_output=$(rostopic echo -n 1 /SwarmbotJobMaintainer/job_queue)
